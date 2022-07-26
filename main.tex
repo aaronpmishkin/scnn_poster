@@ -1,0 +1,380 @@
+%! TEX TS-program = LuaLaTeX
+
+% Gemini theme
+% See: https://rev.cs.uchicago.edu/k4rtik/gemini-uccs
+% A fork of https://github.com/anishathalye/gemini
+
+\documentclass[12pt, usenames, dvipsnames]{beamer}
+
+% ====================
+% Packages
+% ====================
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[size=a0, scale=1]{beamerposter}
+\usetheme{gemini}
+\usecolortheme{stanford}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\usepackage{hyperref}
+\usepackage{amsthm}
+\usepackage{thmtools}
+
+% For theorems and such
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+
+\usepackage{natbib}
+
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{bbm}
+
+% ====================
+% Lengths
+% ====================
+
+% If you have N columns, choose \sepwidth and \colwidth such that
+% (N+1)*\sepwidth + N*\colwidth = \paperwidth
+\newlength{\sepwidth}
+\newlength{\colwidth}
+\setlength{\sepwidth}{0.025\paperwidth}
+\setlength{\colwidth}{0.3\paperwidth}
+
+\newcommand{\separatorcolumn}{\begin{column}{\sepwidth}\end{column}}
+
+\definecolor{DarkFern}{HTML}{407428}
+\colorlet{Fern}{DarkFern!85!white}
+\colorlet{LightFern}{DarkFern!20!white}
+\setbeamercolor{result}{bg=LightFern}
+
+%% load custom macros and pre-defined symbols
+\input{macros/math}
+%% macros for paragraph mode
+\input{macros/paragraph}
+
+%% tikz
+
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\input{macros/plots}
+\usetikzlibrary{shapes, arrows}
+\usetikzlibrary{decorations.pathreplacing, calligraphy}
+
+\newcommand{\red}[1]{\textcolor{Red}{#1}}
+\newcommand{\green}[1]{\textcolor{ForestGreen}{#1}}
+\newcommand{\blue}[1]{\textcolor{DarkBlue}{#1}}
+\newcommand{\purple}[1]{\textcolor{Magenta}{#1}}
+
+% node styles
+\tikzstyle{Input}=[minimum size=0.3cm, fill=black, line width = 0.5mm, draw=black, shape=circle, text=black]
+\tikzstyle{Hidden}=[minimum size=0.3cm, fill=blue, line width = 0.5mm, draw=blue, shape=circle, text=black]
+\tikzstyle{Splits}=[inner sep=0.03cm, minimum size=0.3cm, line width = 0.3mm, draw=blue, shape=circle, text=black]
+\tikzstyle{Output}=[minimum size=0.3cm, fill=white, line width = 0.5mm, draw=black, shape=circle, text=black]
+
+% Edge styles
+\tikzstyle{arrow}=[line width = 0.5mm]
+
+
+\title{Fast Convex Optimization for Two-Layer ReLU Networks: \\ {\huge Equivalent Model Classes and Cone Decompositions}}
+
+
+\author{Aaron Mishkin \inst{1} \and Arda Sahiner \inst{2} \and Mert Pilanci \inst{2}}
+
+\institute[shortinst]{\inst{1} Department of Computer Science, Stanford University \samelineand \inst{2} Department of Electrical Engineering, Stanford University}
+
+% ====================
+% Footer (optional)
+% ====================
+
+\footercontent{
+	\href{http://github.com/pilancilab/scnn}{http://github.com/pilancilab/scnn} \hfill
+	ICML 2022 \hfill
+	\href{mailto:amishkin@cs.stanford.edu}{amishkin@cs.stanford.edu}}
+% (can be left out to remove footer)
+
+% ====================
+% Logo (optional)
+% ====================
+
+% use this to include logos on the left and/or right side of the header:
+% \logoright{\includegraphics[height=7cm]{logos/cs-logo-maroon.png}}
+% \logoleft{\includegraphics[height=7cm]{logos/cs-logo-maroon.png}}
+
+% ====================
+% Body
+% ====================
+
+\begin{document}
+
+% This adds the Logos on the top left and top right
+\addtobeamertemplate{headline}{}
+{
+	\begin{tikzpicture}[remember picture,overlay]
+		%   \node [anchor=north west, inner sep=3cm] at ([xshift=0.0cm,yshift=1.0cm]current page.north west)
+		%   {\includegraphics[height=5.0cm]{stanford_logos/Stanford-CS.png}}; % uc-logo-white.eps
+		\node [anchor=north east, inner sep=3cm] at ([xshift=0.0cm,yshift=2.5cm]current page.north east)
+		{\includegraphics[height=10.0cm]{stanford_logos/Block_S_2_color.png}};
+	\end{tikzpicture}
+}
+
+\begin{frame}[t]
+	\begin{columns}[t]
+		\separatorcolumn
+
+		\begin{column}{\colwidth}
+			\vspace{-1.5em}
+			\begin{block}{Introduction}
+				\large
+				{\large \red{Problem}: optimizing neural networks with stochastic gradient methods is hard.}
+
+				\begin{itemize}
+					\item \textbf{Tuning}: good performance requires tuning the step-size, momentum, \ldots
+
+					\item \textbf{Model Churn}: changing extrinsic parameters like random seed affects model performance \citep{henderson2018deep}.
+
+					\item \textbf{Certificates}: convergence to stationary point, but only with decreasing step-sizes.
+				\end{itemize}
+
+				{\large \green{Approach}: train two-layer models by reformulating them as convex programs.}
+				\vspace{-0.25em}
+
+				\begin{figure}[]
+					\centering
+					\includegraphics[width=.9\textwidth]{assets/synthetic_classification.png}
+					\caption{Effect of random seed on convergence of SGD for a realizable problem.}
+					\vspace{-1em}
+					\label{fig:synthetic_classification}
+				\end{figure}
+
+			\end{block}
+
+			\begin{block}{Convex Reformulations: ReLU Networks}
+
+				\begin{columns}[t]
+					\begin{column}{0.62\textwidth}
+
+						\large
+						{\Large \red{Non-Convex Problem}:}
+						\vspace{1em}
+						\[
+							\Large
+							\min_{w^1, w^2} \underbrace{\norm{\sum_{j=1}^m (X w^1_j)_+ w_j^2 - y}_2^2}_{\text{Squared Error}}
+							+ \underbrace{\lambda \sum_{j=1}^m \norm{w^1_j}_2^2 + \norm{w^2_j}_2^2}_{\text{Weight Decay}},
+						\]
+						where \( \rbr{x}_+ = \max\cbr{x, 0} \) is the ReLU activation.
+
+
+						\vspace{2.5em}
+						\hrule
+						\vspace{2.5em}
+
+						{\Large \green{Convex Reformulation}}: {\normalsize \citep{pilanci2020convexnn}}
+						\vspace{1em}
+						\[ \Large
+							\begin{aligned}
+								\min_{v, h} & \norm{\sum_{j=1}^p D_j X (v_j - h_j) - y}_2^2 +
+								\lambda \sum_{j=1}^p \norm{v_j}_2 + \norm{h_j}_2              \\
+								            & \hspace{0.2em} \purple{\text{s.t. }
+									v_j, h_j \in \calK_j := \cbr{w : (2D_j - I) X w \geq 0}},
+							\end{aligned}
+						\]
+
+						\vspace{1em}
+						where \( D_j = \text{diag}[\mathbbm{1}(X g_j \geq 0)] \).
+
+					\end{column}
+
+					\begin{column}{0.55\textwidth}
+						\vspace{-2em}
+
+						\begin{figure}[]
+							\centering
+							\input{assets/neural_net}
+						\end{figure}
+
+						\vspace{-3em}
+						\begin{figure}[]
+							\centering
+							\input{assets/convex_reformulation}
+						\end{figure}
+
+					\end{column}
+
+				\end{columns}
+
+			\end{block}
+
+
+		\end{column}
+
+		\separatorcolumn
+
+		\begin{column}{\colwidth}
+
+			\vspace{-1.5em}
+			\begin{block}{Problem Scale}
+				\large
+
+				The \textbf{convex program} enumerates all activation patterns,
+				\vspace{0.5em}
+				\[
+					p = \abs{\cbr{D_j = \text{diag}[\mathbbm{1}(X g_j \geq 0)] : g_j \in \R^d }}.
+				\]
+				\vspace{-1em}
+				\begin{itemize}
+					\item \red{Exponential in general}: \( p \in O(r \cdot (\frac{n}{r})^r) \),
+					      where \( r = \text{rank}(X) \) \citep{winder1966partitions}.
+					      \begin{itemize}
+						      \item \large But sub-sampling works well in practice.
+					      \end{itemize}
+					      \vspace{0.1em}
+
+					\item \green{Highly structured} --- it's a huge-scale constrained generalized linear model!
+
+					\item The convex reformulation \purple{exchanges one kind of hardness for another}.
+				\end{itemize}
+			\end{block}
+
+			\vspace{-1em}
+			\begin{block}{Gated ReLU Activations}
+				\large
+
+				\red{Issue}: convex problem is too large for IPMs, but projecting onto \( \calK_j \) is an LP.
+
+				\green{Solution}: consider unconstrained relaxation:
+				\[
+					\begin{aligned}
+						\textbf{C-GReLU}: \min_{u} & \norm{\sum_{j=1}^p D_j X u_j - y}_2^2 +
+						\lambda \sum_{j=1}^p \norm{u_j}_2                                    \\
+					\end{aligned}
+				\]
+
+				\begin{beamercolorbox}[wd=\textwidth,sep=1em]{result}
+					\textbf{Theorem 2.2} (informal): C-GReLU is equivalent to solving
+					\[
+						\textbf{NC-GReLU}: \min_{w^1, w^2} \half \norm{\sum_{j=1}^p \phi_{g_j}(X, w^1_{j})w^2 - y}_2^2 + \frac{\lambda}{2} \sum_{j=1}^p \norm{w^1_{j}}_2^2 + \norm{w_j^2}_2^2,
+					\]
+					with the ``Gated ReLU'' \citep{fiat2019decoupling} activation function
+					\[ \phi_{g}(X, u) = \text{diag}(\mathbbm{1}(Xg \geq 0)) X u, \]
+					and gate vectors \( g_j \) such that \( D_j = \text{diag}[\mathbbm{1}(X g_j \geq 0) \).
+				\end{beamercolorbox}
+
+				\textbf{Interpretation}: if \( u_j \not \in \calK_j \), then activation
+				must be decoupled from weights.
+
+			\end{block}
+			\vspace{-1em}
+			\begin{block}{Cone Decompositions}
+				\large
+				{ \Large
+					\red{Q}: when are Gated ReLU and ReLU networks equivalent?
+
+					\green{A}: if we can decompose \( u_j = v_j - h_j \) for some \( v_j, h_j \in \calK_j \).
+				}
+
+				\begin{figure}[t]
+					\input{assets/cone_decomp}
+					\caption{Illustration of cone decomposition procedure.}
+					\label{fig:cone-decomp}
+				\end{figure}
+
+				\textbf{Existence} of ``cone decompositions'':
+				\vspace{-0.5em}
+				\begin{itemize}
+					\item We can guarantee \( \calK_j - \calK_j = \R^d \) if \( X \) is \green{full row-rank}.
+					\item More generally, we show ``flat'' \( \calK_j \) can be \green{safely merged} into other neurons.
+				\end{itemize}
+			\end{block}
+		\end{column}
+
+		\separatorcolumn
+
+		\begin{column}{\colwidth}
+			\vspace{-1.5em}
+			\begin{block}{Main Approximation Result}
+
+				\large
+				\vspace{1em}
+
+				\begin{beamercolorbox}[wd=\textwidth,sep=1em]{result}
+					\textbf{Theorem 3.7} (informal):
+					Let \( \lambda \geq 0 \) and let \( p^* \) be the optimal value of the ReLU problem.
+					There exists a C-GReLU problem with minimizer \( u^* \) and optimal value \( d^* \) satisfying,
+					%\vspace{-1em}
+					{ \Large
+							\[
+								d^* \leq p^* \leq d^* + \textcolor{Red}{2 \lambda \kappa(\tilde X_{\calJ}) \sum_{D_i \in \tilde \calD} \norm{u_i^*}_2}.
+							\]
+						}
+				\end{beamercolorbox}
+				\textbf{Consequence}: ReLU and Gated ReLU model classes are equivalent!
+
+			\end{block}
+			\vspace{-1em}
+			\begin{block}{Algorithms}
+
+				\large
+				We develop two algorithms for solving the convex reformulations:
+				\vspace{-0.5em}
+				\begin{itemize}
+					\item \textbf{R-FISTA}: a restarted FISTA variant for Gated ReLU.
+					\item \textbf{AL}: an augmented Lagrangian method for the (constrained) ReLU Problem.
+				\end{itemize}
+
+				And we can use all the \green{convex tricks}!
+				\vspace{-0.5em}
+				\begin{itemize}
+					\item \textbf{Fast}: \( O(1/t^2) \) convergence rate.
+
+					\item \textbf{Tuning-free}: line-search, restarts, data normalization, \ldots
+
+					\item \textbf{Certificates}: termination based on minimum-norm subgradient.
+				\end{itemize}
+			\end{block}
+			\vspace{-1em}
+			\begin{block}{Experiments}
+				\large
+				\begin{figure}[]
+					\centering
+					\includegraphics[width=\textwidth]{assets/pp_main.pdf}
+					\caption{Performance profile comparing convex solvers to Adam and SGD.}
+					\label{fig:performance-profile}
+				\end{figure}
+				\vspace{-0.5em}
+				\begin{itemize}
+					\item Performance on 438 training problems generated from the UCI repository.
+					\item R-FISTA/AL solve \textbf{more problems, faster}, than SGD and Adam.
+				\end{itemize}
+			\end{block}
+			\vspace{-1em}
+			\begin{block}{References}
+
+				\footnotesize{
+					\bibliography{
+						bib/monographs.bib,
+						bib/gradient_methods.bib,
+						bib/lower_bounds.bib,
+						bib/assumptions.bib,
+						bib/interpolation.bib,
+						bib/step_sizes.bib,
+						bib/datasets.bib,
+						bib/general_refs.bib}
+				}
+				\bibliographystyle{icml2022}
+
+			\end{block}
+
+		\end{column}
+
+		\separatorcolumn
+	\end{columns}
+\end{frame}
+
+\end{document}
